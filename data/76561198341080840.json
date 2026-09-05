@@ -1,0 +1,87 @@
+{
+  "savedAt": "2026-09-02T15:25:52.535Z",
+  "roles": {
+    "PEACE": {
+      "RoleID": "PEACE",
+      "PrimaryWeapon": "PEACE_GSW-AR",
+      "SecondWeapon": "PEACE_RU-APS",
+      "LeftPylon": "PEACE_TAC-EMP",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "PEACE_FCM-GRAPPLE",
+      "_SkinBase": "PEACE_ORIGINAL",
+      "_SkinPaint": "PEACE_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGOrlanDefault",
+      "_Cosmetic10": "HONONE",
+      "_WeaponConfigs": {
+        "PEACE_GSW-AR": "CgxQRUFDRV9HU1ctQVISIQgBEhBHU1ctQVJfTVpMLUJSQUtFGgsKCQoHUGFydE9yaRIiCAISEUdTVy1BUl9CUkwtQlItU1REGgsKCQoHUGFydE9yaRIhCAMSEEdTVy1BUl9IR0QtTElHSFQaCwoJCgdQYXJ0T3JpEicIBBITR1NXLUFSX0ZSTS1GVUxMQVVUTxoOCgwSClBUT3JpZ2luYWwSOwgFEhJHU1ctQVJfR1JQLUdTVy1TVEQaIwohCgdQYXJ0T3JpEhZHU1ctQVJfR3JpcF9QVE9yaWdpbmFsEjgIBhIUR1NXLUFSX1NHVC1IT0xPLU9QRU4aHgoJCgdQYXJ0T3JpEhFDUkhIT0xPQ0lSQ0xFRE9UQRIGCAcaAgoAEgYICBoCCgASIwgJEhJHU1ctQVJfTUFHLUFSLUZBU1QaCwoJCgdQYXJ0T3JpEgYIChoCCgAaNwosCg5Ta2luQVJPcmlnaW5hbBIaR1NXLUFSX09yaWdpbmFsX1BUT3JpZ2luYWwaB1dPLU5PTkU="
+      }
+    },
+    "PROBE": {
+      "RoleID": "PROBE",
+      "PrimaryWeapon": "PROBE_GSW-DMR",
+      "SecondWeapon": "PROBE_GSW-FOP",
+      "LeftPylon": "PROBE_MISSILE-HIVE",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "PROBE_FCM-GRAPPLE",
+      "_SkinBase": "PROBE_ORIGINAL",
+      "_SkinPaint": "PROBE_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGProbeDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "Sniper": {
+      "RoleID": "Sniper",
+      "PrimaryWeapon": "SNIPER_GSW-AMR",
+      "SecondWeapon": "SNIPER_GSW-CDP",
+      "LeftPylon": "SNIPER_INFO-SNAPSHOT",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "SNIPER_FCM-GRAPPLE",
+      "_SkinBase": "SNIPER_ORIGINAL",
+      "_SkinPaint": "SNIPER_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGYangDefault",
+      "_Cosmetic10": "HONONE",
+      "_WeaponConfigs": {
+        "SNIPER_GSW-AMR": "Cg5TTklQRVJfR1NXLUFNUhIpCAESGEdTVy1BTVJfTVpMLUZMQVNISElERVItSBoLCgkKB1BhcnRPcmkSJggCEhVHU1ctQU1SX0JSTC1BTVItU0hPUlQaCwoJCgdQYXJ0T3JpEgYIAxoCCgASJAgEEhBHU1ctQU1SX0ZSTS1TRU1JGg4KDBIKUFRPcmlnaW5hbBI9CAUSE0dTVy1BTVJfR1JQLUdTVy1TVEQaJAoiCgdQYXJ0T3JpEhdHU1ctQU1SX0dyaXBfUFRPcmlnaW5hbBIoCAYSF0dTVy1BTVJfU0dULUlST04tRkxJUC1NGgsKCQoHUGFydE9yaRIGCAcaAgoAEgYICBoCCgASJAgJEhNHU1ctQU1SX01BRy1BTVItRVhUGgsKCQoHUGFydE9yaRIGCAoaAgoAGjkKLgoPU2tpbkFNUk9yaWdpbmFsEhtHU1ctQU1SX09yaWdpbmFsX1BUT3JpZ2luYWwaB1dPLU5PTkU="
+      }
+    },
+    "FORT": {
+      "RoleID": "FORT",
+      "PrimaryWeapon": "FORT_GSW-MG",
+      "SecondWeapon": "FORT_GSW-IDW",
+      "LeftPylon": "FORT_TAC-ADS",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "FORT_FCM-GRAPPLE",
+      "_SkinBase": "FORT_ORIGINAL",
+      "_SkinPaint": "FORT_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGFortDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "FIXER": {
+      "RoleID": "FIXER",
+      "PrimaryWeapon": "FIXER_GSW-PCC",
+      "SecondWeapon": "FIXER_GSW-FOP",
+      "LeftPylon": "FIXER_TAC-MED",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "FIXER_FCM-GRAPPLE",
+      "_SkinBase": "FIXER_ORIGINAL",
+      "_SkinPaint": "FIXER_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGDocDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "SPIKE": {
+      "RoleID": "SPIKE",
+      "PrimaryWeapon": "SPIKE_GSW-SMG",
+      "SecondWeapon": "SPIKE_GSW-FOP",
+      "LeftPylon": "SPIKE_TAC-IMPLUSE",
+      "MeleeWeapon": "MELEE-HAMMER",
+      "MobilityModule": "SPIKE_FCM-DASH",
+      "_SkinBase": "SPIKE_TIGER",
+      "_SkinPaint": "SPIKE_TIGER_PTTigerYaoEr",
+      "_Cosmetic9": "ABGSpaceKitty",
+      "_Cosmetic10": "HOBullHorn",
+      "_WeaponConfigs": {
+        "SPIKE_GSW-SMG": "Cg1TUElLRV9HU1ctU01HEjcIARIRR1NXLVNNR19NWkwtQlJBS0UaIAoeCgtTTUdUaWdlck1aTBIPR1NXLVNNR19QVFRpZ2VyEkMIAhIVR1NXLVNNR19CUkwtU01HLVNIT1JUGigKJgoHUGFydE9yaRIbR1NXLVNNR19CYXJyZWxfUFRFbGVjdHJvUmVkEgYIAxoCCgASKAgEEhRHU1ctU01HX0ZSTS1GVUxMQVVUTxoOCgwSClBUT3JpZ2luYWwSOQgFEhNHU1ctU01HX0dSUC1HU1ctU1REGiAKHgoLU01HVGlnZXJHUlASD0dTVy1TTUdfUFRUaWdlchJNCAYSGUdTVy1TTUdfU0dULUhPTE8tT1BFTldJREUaLgosCgdQYXJ0T3JpEiFHU1ctU01HX1NpZ2h0T3B0aWNhbF9QVEVsZWN0cm9SZWQSBggHGgIKABIGCAgaAgoAEk0ICRIUR1NXLVNNR19NQUctU01HLURSVU0aMwoxCgdQYXJ0T3JpEiZHU1ctU01HX0FtbW9TdG9yYWdlRGV2aWNlX1BURWxlY3Ryb1JlZBIGCAoaAgoAGi8KJAoMU2tpblNNR1RpZ2VyEhRTa2luU01HVGlnZXJfUFRUaWdlchoHV08tTk9ORQ==",
+        "SPIKE_GSW-FOP": "Cg1TUElLRV9HU1ctRk9QEjsIARIPR1NXLUZPUF9NWkwtU1REGiYKJAoHUGFydE9yaRIZR1NXLUZPUF9NdXp6bGVfUFRPcmlnaW5hbBIGCAIaAgoAEgYIAxoCCgASKggEEhZHU1ctRk9QX0ZSTS1NRVRBTFNUT1JNGg4KDBIKUFRPcmlnaW5hbBI/CAUSE0dTVy1GT1BfR1JQLUdTVy1TVEQaJgokCgdQYXJ0T3JpEhlHU1ctRk9QX0dyaXBfUFRFbGVjdHJvUmVkEkgIBhIUR1NXLUZPUF9TR1QtSVJPTi1GT1AaLgosCgdQYXJ0T3JpEiFHU1ctRk9QX1NpZ2h0T3B0aWNhbF9QVEVsZWN0cm9SZWQSBggHGgIKABIGCAgaAgoAEkkICRIVR1NXLUZPUF9NQUctRk9QLUhJVkVMGi4KLAoHUGFydE9yaRIhR1NXLUZPUF9BbW1vU3RvcmFnZURldmljZV9QVFByaXNtEgYIChoCCgAaPgowCg9Ta2luRk9QT3JpZ2luYWwSHUdTVy1GT1BfT3JpZ2luYWxfUFRFbGVjdHJvUmVkGgpXTy1ZaW5nWW91"
+      }
+    }
+  }
+}

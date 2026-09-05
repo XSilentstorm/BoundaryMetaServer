@@ -1,0 +1,77 @@
+{
+  "savedAt": "2026-08-09T16:05:19.119Z",
+  "roles": {
+    "PEACE": {
+      "RoleID": "PEACE",
+      "PrimaryWeapon": "PEACE_RU-AKM",
+      "SecondWeapon": "PEACE_RU-APS",
+      "LeftPylon": "PEACE_TAC-EMP",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "PEACE_FCM-GRAPPLE",
+      "_SkinBase": "PEACE_ORIGINAL",
+      "_SkinPaint": "PEACE_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGOrlanDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "PROBE": {
+      "RoleID": "PROBE",
+      "PrimaryWeapon": "PROBE_GSW-DMR",
+      "SecondWeapon": "PROBE_GSW-FOP",
+      "LeftPylon": "PROBE_MISSILE-HIVE",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "PROBE_FCM-GRAPPLE",
+      "_SkinBase": "PROBE_ORIGINAL",
+      "_SkinPaint": "PROBE_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGProbeDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "Sniper": {
+      "RoleID": "Sniper",
+      "PrimaryWeapon": "SNIPER_GSW-PSR",
+      "SecondWeapon": "SNIPER_GSW-CDP",
+      "LeftPylon": "SNIPER_INFO-SNAPSHOT",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "SNIPER_FCM-GRAPPLE",
+      "_SkinBase": "SNIPER_ORIGINAL",
+      "_SkinPaint": "SNIPER_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGYangDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "FORT": {
+      "RoleID": "FORT",
+      "PrimaryWeapon": "FORT_GSW-MG",
+      "SecondWeapon": "FORT_GSW-IDW",
+      "LeftPylon": "FORT_TAC-ADS",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "FORT_FCM-GRAPPLE",
+      "_SkinBase": "FORT_ORIGINAL",
+      "_SkinPaint": "FORT_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGFortDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "FIXER": {
+      "RoleID": "FIXER",
+      "PrimaryWeapon": "FIXER_GSW-PCC",
+      "SecondWeapon": "FIXER_GSW-FOP",
+      "LeftPylon": "FIXER_TAC-MED",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "FIXER_FCM-GRAPPLE",
+      "_SkinBase": "FIXER_ORIGINAL",
+      "_SkinPaint": "FIXER_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGDocDefault",
+      "_Cosmetic10": "HONONE"
+    },
+    "SPIKE": {
+      "RoleID": "SPIKE",
+      "PrimaryWeapon": "SPIKE_GSW-SG",
+      "SecondWeapon": "SPIKE_GSW-IDW",
+      "LeftPylon": "SPIKE_SMK-SQUID",
+      "MeleeWeapon": "MELEE-KNIFE",
+      "MobilityModule": "SPIKE_FCM-GRAPPLE",
+      "_SkinBase": "SPIKE_ORIGINAL",
+      "_SkinPaint": "SPIKE_ORIGINAL_PTOriginal",
+      "_Cosmetic9": "ABGSpikeDefault",
+      "_Cosmetic10": "HONONE"
+    }
+  }
+}

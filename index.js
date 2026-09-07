@@ -23,7 +23,7 @@ const { serialize } = require("v8"); // retained (present in original)
 const HTTP_PORT = Number(process.env.PORT || 8000);
 const RPC_PORT = Number(process.env.RPC_PORT || 6969);
 const MATCHMAKING_PORT = Number(process.env.MATCHMAKING_PORT || 9000);
-const MATCHMAKING_HOST = process.env.MATCHMAKING_HOST || "130.162.208.26";
+const MATCHMAKING_HOST = process.env.MATCHMAKING_HOST || "132.226.204.81";
 
 // Gate/handshake token echoed by the client after /connectServer
 const TEST_GATE_TOKEN =

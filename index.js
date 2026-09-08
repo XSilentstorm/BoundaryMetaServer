@@ -207,11 +207,19 @@ let partyPresence = "InMatching";
 //  Logger
 // -----------------------------------------------------------------------------
 
+const LOG_LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
+const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
+const LOG_LEVEL_VALUE = LOG_LEVELS[LOG_LEVEL] !== undefined ? LOG_LEVELS[LOG_LEVEL] : LOG_LEVELS.info;
+
+function logTimestamp() {
+  return new Date().toISOString();
+}
+
 const logger = {
-  info: (...args) => console.log(...args),
-  warn: (...args) => console.warn(...args),
-  error: (...args) => console.error(...args),
-  debug: (...args) => console.log(...args),
+  debug: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.debug) console.log(`[${logTimestamp()}] [DEBUG]`, ...args); },
+  info:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.info)  console.log(`[${logTimestamp()}] [INFO]`, ...args); },
+  warn:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.warn)  console.warn(`[${logTimestamp()}] [WARN]`, ...args); },
+  error: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.error) console.error(`[${logTimestamp()}] [ERROR]`, ...args); },
 };
 
 // -----------------------------------------------------------------------------
@@ -673,21 +681,21 @@ function handleUpdateRoleArchive(ctx) {
   if (!req.roleId) return;
 
   const archive = ctx.socket._roleArchive;
-  if (!archive) { logger.warn("[PERSIST] No archive on socket — gateToken not resolved"); return; }
+  if (!archive) { logger.warn(`${ctx.tag} [PERSIST] No archive on socket — gateToken not resolved`); return; }
 
   const entry = ensureRoleEntry(archive, req.roleId);
   const field = SLOT_TO_FIELD[req.slot];
 
   if (field && req.itemId) {
     entry[field] = req.itemId;
-    logger.info(`[PERSIST] ${req.roleId}.${field} = ${req.itemId}`);
+    logger.info(`${ctx.tag} [PERSIST] ${req.roleId}.${field} = ${req.itemId}`);
   } else if (req.slot === 7) {
     if (req.skinBase) entry[SKIN_BASE_KEY] = req.skinBase;
     if (req.skinOrnament) entry[SKIN_PAINT_KEY] = req.skinOrnament;
-    logger.info(`[PERSIST] ${req.roleId} skin = ${req.skinBase} / ${req.skinOrnament}`);
+    logger.info(`${ctx.tag} [PERSIST] ${req.roleId} skin = ${req.skinBase} / ${req.skinOrnament}`);
   } else if ((req.slot === 9 || req.slot === 10) && req.itemId) {
     entry[`${COSMETIC_KEY_PREFIX}${req.slot}`] = req.itemId;
-    logger.info(`[PERSIST] ${req.roleId} cosmetic #${req.slot} = ${req.itemId}`);
+    logger.info(`${ctx.tag} [PERSIST] ${req.roleId} cosmetic #${req.slot} = ${req.itemId}`);
   }
 
   saveArchiveFor(ctx.socket._playerId, archive);
@@ -708,7 +716,7 @@ function handleUpdateWeaponArchive(ctx) {
   entry[WEAPON_CONFIG_KEY][weaponId] = req.weaponArchiveBlob.toString("base64");
 
   logger.info(
-    `[PERSIST] ${req.roleId}.${weaponId} weapon archive (${req.weaponArchiveBlob.length}B)`
+    `${ctx.tag} [PERSIST] ${req.roleId}.${weaponId} weapon archive (${req.weaponArchiveBlob.length}B)`
   );
   saveArchiveFor(ctx.socket._playerId, archive);
 }
@@ -716,6 +724,7 @@ function handleUpdateWeaponArchive(ctx) {
 // ---- Hex diagnostic logger (disabled in production) ----
 
 function logLoadoutHex({ rpcPath, messageId, messageBytes, frameBytes, extra }) {
+  if (LOG_LEVEL_VALUE > LOG_LEVELS.debug) return; // hex diagnostics are debug-only (keeps logs/ dir small in prod)
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
   const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const logPath = path.join(LOG_DIR, `loadout-hex-${day}.log`);
@@ -748,13 +757,20 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
-  logger.info("\n=== RECEIVED REQUEST ===");
-  logger.info(`Time: ${new Date().toISOString()}`);
-  logger.info(`Method: ${req.method}`);
-  logger.info(`URL: ${req.originalUrl}`);
-  logger.info(`Headers:`, JSON.stringify(req.headers, null, 2));
-  logger.info(`Body:`, JSON.stringify(req.body, null, 2));
-  logger.info("========================\n");
+  // Skip favicon + health probes (polled constantly by the game/DLL and uptime checks).
+  if (req.path === "/favicon.ico" || req.path === "/api/health") return next();
+
+  res.on("finish", () => {
+    const body =
+      req.body && typeof req.body === "object" && Object.keys(req.body).length
+        ? " " + JSON.stringify(req.body)
+        : "";
+    logger.info(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode}${body}`);
+  });
+
+  logger.debug(
+    `[HTTP] ${req.method} ${req.originalUrl} headers=${JSON.stringify(req.headers)} body=${JSON.stringify(req.body)}`
+  );
   next();
 });
 
@@ -923,7 +939,7 @@ function handleUpdateWeaponArchiveV2(ctx) {
 }
 
 function handleGetPlayerArchiveV2(ctx) {
-  logger.info("[RECV] Player Archive V2!");
+  logger.info(`${ctx.tag} [RECV] GetPlayerArchiveV2`);
 
   const reqObj = decodeRequestMessage(
     "./game/proto/Request/GetPlayerArchiveV2Request.proto",
@@ -967,7 +983,7 @@ function handleGetPlayerArchiveV2(ctx) {
 }
 
 function handleQueryAssets(ctx) {
-  logger.info("[RECV] Query Assets!");
+  logger.info(`${ctx.tag} [RECV] Query Assets`);
   const responseObj = { ItemDatas: [], ItemCount: 0 };
   try {
     const allItems = Object.keys(
@@ -1081,7 +1097,7 @@ function handleSetPresence(ctx) {
     ctx.messageBytes
   );
   partyPresence = reqObj.Presence;
-  logger.info(`[PARTY] Presence => ${partyPresence}`);
+  logger.info(`${ctx.tag} [PARTY] Presence => ${partyPresence}`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1107,7 +1123,7 @@ function handleQueryPresence(ctx) {
 }
 
 function handleQueryUnityMatchmakingRegion(ctx) {
-  logger.info("[RECV] Query Matchmaking Region!");
+  logger.info(`${ctx.tag} [RECV] Query Matchmaking Region`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1119,7 +1135,7 @@ function handleQueryUnityMatchmakingRegion(ctx) {
 }
 
 function handleStartUnityMatchmaking(ctx) {
-  logger.info("[RECV] Start Matchmaking!");
+  logger.info(`${ctx.tag} [RECV] Start Matchmaking`);
   const reqObj = decodeRequestMessage(
     "./game/proto/Request/StartMatchmakingRequest.proto",
     "ProjectBoundary.StartMatchmakingRequest",
@@ -1149,7 +1165,7 @@ function handleGetDataStatisticsInfo(ctx) {
 }
 
 function handleQueryPlayList(ctx) {
-  logger.info("[RECV] Query Playlists!");
+  logger.info(`${ctx.tag} [RECV] Query Playlists`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1190,7 +1206,20 @@ const rpcHandlers = {
   "/profile.Profile/QueryCurrency": handleQueryCurrency,
 };
 
+// Client telemetry / fire-and-forget paths we intentionally don't answer.
+// Suppressed at info level so they don't flood the console during normal play.
+const IGNORED_RPC_PATHS = [
+  "/mission.Mission/",
+  "/event.Event/",
+  "/eventtracking.EventTracking/",
+];
+const ignoredRpcNoticed = new Set();
+
 function dispatchRpc(ctx) {
+  ctx.tag = ctx.socket._playerId
+    ? `[player ${ctx.socket._playerId}]`
+    : `[${ctx.socket.remoteAddress}:${ctx.socket.remotePort}]`;
+
   // GateToken echo: dynamic UUID tokens resolve the socket's player identity
   if (gateTokenToPlayerId.has(ctx.rpcPath)) {
     handleGateTokenEcho(ctx);
@@ -1199,7 +1228,15 @@ function dispatchRpc(ctx) {
 
   const handler = rpcHandlers[ctx.rpcPath];
   if (!handler) {
-    logger.info("[RECV] Undefined Message:", { path: ctx.rpcPath, MessageId: ctx.messageId });
+    const ignored = IGNORED_RPC_PATHS.some((p) => ctx.rpcPath.startsWith(p));
+    if (ignored) {
+      if (!ignoredRpcNoticed.has(ctx.rpcPath)) {
+        ignoredRpcNoticed.add(ctx.rpcPath);
+        logger.debug(`${ctx.tag} [RPC] ignoring known no-op ${ctx.rpcPath} (suppressed at info)`);
+      }
+      return;
+    }
+    logger.warn(`${ctx.tag} [RPC] Unhandled message ${ctx.rpcPath} (MessageId ${ctx.messageId})`);
     logLoadoutHex({
       rpcPath: ctx.rpcPath,
       messageId: ctx.messageId,
@@ -1214,7 +1251,7 @@ function dispatchRpc(ctx) {
     handler(ctx);
   } catch (err) {
     logger.error(
-      `[RPC] Handler failed path=${ctx.rpcPath} MessageId=${ctx.messageId}:`,
+      `${ctx.tag} [RPC] Handler failed path=${ctx.rpcPath} MessageId=${ctx.messageId}:`,
       err && err.stack ? err.stack : err
     );
   }
@@ -1307,8 +1344,7 @@ function onTcpData(socket, chunk) {
 }
 
 const server = net.createServer((socket) => {
-  logger.info("\n=== Client connected ===");
-  logger.info(`From: ${socket.remoteAddress}:${socket.remotePort}\n`);
+  logger.info(`[RPC] client connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
   socket._recvBuffer = Buffer.alloc(0);
 
@@ -1323,8 +1359,15 @@ const server = net.createServer((socket) => {
     }
   });
 
-  socket.on("end", () => logger.info("\n=== Client disconnected ===\n"));
-  socket.on("error", (err) => logger.error("Socket error:", err));
+  socket.on("end", () =>
+    logger.info(
+      `[RPC] client disconnected ${socket.remoteAddress}:${socket.remotePort}` +
+        (socket._playerId ? ` (player ${socket._playerId})` : "")
+    )
+  );
+  socket.on("error", (err) =>
+    logger.error(`[RPC] socket error ${socket.remoteAddress}:${socket.remotePort}:`, err.message)
+  );
 });
 
 // =============================================================================
@@ -1334,47 +1377,35 @@ const server = net.createServer((socket) => {
 const matchmakingUDPServer = udp.createSocket("udp4");
 
 matchmakingUDPServer.on("error", (error) => {
-  logger.info("[MM] Server blew up!");
-  logger.info(error.toString());
+  logger.error("[MM] UDP error:", error.toString());
   matchmakingUDPServer.close();
 });
 
 matchmakingUDPServer.on("close", () => {
-  logger.info("[MM] Shutdown!");
+  logger.info("[MM] UDP socket closed");
 });
 
 matchmakingUDPServer.on("message", (message, info) => {
   if (message[0] == QOS_REQUEST_BYTE) {
-    logger.info("[MM] Received a new QoS message, echoing!");
     const header = Buffer.alloc(3);
     header[0] = QOS_RESPONSE_BYTE;
     header[1] = 0x00;
     const resp = Buffer.concat([header, message.subarray(11)]);
-    matchmakingUDPServer.send(resp, info.port, info.address, (error, bytesSent) => {
-      logger.info("Sent Info\n", {
-        error,
-        bytesSent,
-        addr: info.address,
-        port: info.port,
-        req: message.toString("hex"),
-        resp: resp.toString("hex"),
-      });
-    });
+    matchmakingUDPServer.send(resp, info.port, info.address, () => {});
+    logger.debug(`[MM] QoS echo -> ${info.address}:${info.port} (${message.length}B)`);
   } else {
-    logger.info("[MM] Recv'd an unknown message!");
-    logger.info(message);
+    logger.warn(`[MM] Unknown UDP message from ${info.address}:${info.port}: ${message.toString("hex")}`);
   }
 });
 
 matchmakingUDPServer.on("listening", () => {
-  logger.info(`mrooooow >.< - ${MATCHMAKING_PORT}`);
+  logger.info(`[MM] UDP bound on :${MATCHMAKING_PORT}`);
 });
 
 const matchmakingTCPServer = net.createServer((socket) => {
-  logger.info("\n=== Client connected ===");
-  logger.info(`From: ${socket.remoteAddress}:${socket.remotePort}\n`);
+  logger.info(`[MM] TCP client connected from ${socket.remoteAddress}:${socket.remotePort}`);
   socket.on("data", (rawdata) => {
-    logger.info("MOGGEDDDDDDDDD");
+    logger.debug(`[MM] TCP data (${rawdata.length}B): ${rawdata.toString("hex").slice(0, 128)}`);
   });
 });
 
@@ -1383,9 +1414,9 @@ const matchmakingTCPServer = net.createServer((socket) => {
 // =============================================================================
 
 app.listen(HTTP_PORT, () => {
-  logger.info(`mrow :3 - ${HTTP_PORT}`);
+  logger.info(`[HTTP] listening on :${HTTP_PORT}`);
   server.listen(RPC_PORT, () => {
-    logger.info(`miau >:3 - ${RPC_PORT}`);
+    logger.info(`[RPC]  listening on :${RPC_PORT}`);
     matchmakingUDPServer.bind(MATCHMAKING_PORT);
     matchmakingTCPServer.listen(MATCHMAKING_PORT);
   });

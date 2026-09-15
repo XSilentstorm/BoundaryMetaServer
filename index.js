@@ -1370,6 +1370,10 @@ const server = net.createServer((socket) => {
   );
 });
 
+server.on("error", (err) => {
+  logger.error(`[RPC] server error: ${err.message}`);
+});
+
 // =============================================================================
 //  UDP Matchmaking (port MATCHMAKING_PORT)
 // =============================================================================
@@ -1407,11 +1411,32 @@ const matchmakingTCPServer = net.createServer((socket) => {
   socket.on("data", (rawdata) => {
     logger.debug(`[MM] TCP data (${rawdata.length}B): ${rawdata.toString("hex").slice(0, 128)}`);
   });
+  // Internet scanners (Shodan/Censys/etc.) hit :9000/TCP and reset abruptly.
+  // Without this listener, the socket 'error' event becomes an uncaught
+  // exception and crashes the whole metaserver (pm2 restarts it in a loop).
+  socket.on("error", (err) => {
+    logger.debug(`[MM] TCP socket error ${socket.remoteAddress}:${socket.remotePort}: ${err.message}`);
+  });
+  socket.on("close", () => {
+    logger.debug(`[MM] TCP client disconnected ${socket.remoteAddress}:${socket.remotePort}`);
+  });
+});
+matchmakingTCPServer.on("error", (err) => {
+  logger.error(`[MM] TCP server error: ${err.message}`);
 });
 
 // =============================================================================
 //  Startup
 // =============================================================================
+
+// Safety net: a single bad connection must never take the whole metaserver down.
+// Log-and-continue (instead of the default crash) so pm2 doesn't restart-loop.
+process.on("uncaughtException", (err) => {
+  logger.error("[FATAL] uncaughtException:", err && err.stack ? err.stack : err);
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error("[FATAL] unhandledRejection:", reason);
+});
 
 app.listen(HTTP_PORT, () => {
   logger.info(`[HTTP] listening on :${HTTP_PORT}`);

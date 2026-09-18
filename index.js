@@ -45,6 +45,10 @@ const TCP_HANDSHAKE_ECHO_HEX = "000000022f2f";
 const DATA_DIR = path.join(__dirname, "data");
 const LOG_DIR = path.join(__dirname, "logs");
 
+// Ensure dirs exist once at startup (avoids a sync mkdir on every save).
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
 // ---- Per-player archive paths ----
 
 /** Map gateToken → playerId (populated by /connectServer, consumed by TCP handshake). */
@@ -102,14 +106,26 @@ function loadArchiveFor(playerId) {
   }
 }
 
+let saveSeq = 0;
+
 function saveArchiveFor(playerId, archive) {
+  // Async + atomic: write to a unique temp file, then rename over the target.
+  // This keeps the blocking disk I/O off the ACK path (the client gets its
+  // "equipped" response immediately) and prevents corruption on a crash.
   try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(
-      getArchivePath(playerId),
-      JSON.stringify({ savedAt: new Date().toISOString(), roles: archive }, null, 2),
-      "utf8"
-    );
+    const target = getArchivePath(playerId);
+    const tmp = `${target}.${process.pid}.${++saveSeq}.tmp`;
+    const payload = JSON.stringify({ savedAt: new Date().toISOString(), roles: archive }, null, 2);
+    fs.writeFile(tmp, payload, "utf8", (err) => {
+      if (err) {
+        logger.error(`[PERSIST] Save failed for ${playerId}:`, err.message);
+        fs.unlink(tmp, () => {});
+        return;
+      }
+      fs.rename(tmp, target, (err2) => {
+        if (err2) logger.error(`[PERSIST] Rename failed for ${playerId}:`, err2.message);
+      });
+    });
   } catch (e) {
     logger.error(`[PERSIST] Save failed for ${playerId}:`, e.message);
   }
@@ -877,10 +893,22 @@ app.put("/api/loadout/:playerId", (req, res) => {
     if (!snapshot || typeof snapshot !== "object") {
       return res.status(400).json({ error: "Invalid snapshot" });
     }
-    const p = path.join(DATA_DIR, `${playerId}-snapshot.json`);
-    fs.writeFileSync(p, JSON.stringify(snapshot, null, 2), "utf8");
-    logger.info(`[PERSIST] Snapshot saved for ${playerId}`);
-    res.status(200).json({ status: "ok" });
+    const target = path.join(DATA_DIR, `${playerId}-snapshot.json`);
+    const tmp = `${target}.${process.pid}.${++saveSeq}.tmp`;
+    fs.writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf8", (err) => {
+      if (err) {
+        logger.error("[PERSIST] Snapshot save failed:", err.message);
+        return res.status(500).json({ error: "Save failed" });
+      }
+      fs.rename(tmp, target, (err2) => {
+        if (err2) {
+          logger.error("[PERSIST] Snapshot rename failed:", err2.message);
+          return res.status(500).json({ error: "Save failed" });
+        }
+        logger.info(`[PERSIST] Snapshot saved for ${playerId}`);
+        res.status(200).json({ status: "ok" });
+      });
+    });
   } catch (e) {
     logger.error("[PERSIST] Snapshot save failed:", e.message);
     res.status(500).json({ error: "Save failed" });
@@ -982,28 +1010,33 @@ function handleGetPlayerArchiveV2(ctx) {
   ctx.socket.write(responseFrame);
 }
 
+let cachedQueryAssets = null; // { responseBytes: Buffer, itemCount: number }
+
 function handleQueryAssets(ctx) {
-  logger.info(`${ctx.tag} [RECV] Query Assets`);
-  const responseObj = { ItemDatas: [], ItemCount: 0 };
-  try {
-    const allItems = Object.keys(
-      JSON.parse(fs.readFileSync("./game/definitions/DT_ItemType.json", "utf8"))[0]["Rows"]
-    );
-    for (const item of allItems) {
-      responseObj.ItemDatas.push({ ItemId: item, Unknown1: 1, Unknown2: 1, Unknown3: 1 });
+  // DT_ItemType.json is static — parse it once and pre-encode the response, then
+  // serve from memory. Previously this did readFileSync + JSON.parse + full
+  // protobuf encode on every armory open.
+  if (!cachedQueryAssets) {
+    let itemDatas = [];
+    try {
+      const itemIds = Object.keys(
+        JSON.parse(fs.readFileSync("./game/definitions/DT_ItemType.json", "utf8"))[0]["Rows"]
+      );
+      itemDatas = itemIds.map((item) => ({ ItemId: item, Unknown1: 1, Unknown2: 1, Unknown3: 1 }));
+    } catch (e) {
+      logger.error("[QueryAssets] Preload failed:", e.message);
     }
-    responseObj.ItemCount = responseObj.ItemDatas.length;
-  } catch (e) {
-    logger.error("[QueryAssets] Failed:", e.message);
+    cachedQueryAssets = {
+      responseBytes: encodeProtoMessage(
+        "./game/proto/Response/QueryAssetsResponse.proto",
+        "ProjectBoundary.QueryAssetsResponse",
+        { ItemDatas: itemDatas, ItemCount: itemDatas.length }
+      ),
+      itemCount: itemDatas.length,
+    };
   }
-  sendProtoResponse(
-    ctx.socket,
-    ctx.messageId,
-    ctx.rpcPath,
-    "./game/proto/Response/QueryAssetsResponse.proto",
-    "ProjectBoundary.QueryAssetsResponse",
-    responseObj
-  );
+  logger.info(`${ctx.tag} [RECV] Query Assets (${cachedQueryAssets.itemCount} items)`);
+  sendEncodedProtoResponse(ctx.socket, ctx.messageId, ctx.rpcPath, cachedQueryAssets.responseBytes);
 }
 
 function handleQueryNotification(ctx) {
@@ -1346,6 +1379,7 @@ function onTcpData(socket, chunk) {
 const server = net.createServer((socket) => {
   logger.info(`[RPC] client connected from ${socket.remoteAddress}:${socket.remotePort}`);
 
+  socket.setNoDelay(true); // disable Nagle's algorithm for snappier ACK latency
   socket._recvBuffer = Buffer.alloc(0);
 
   socket.on("data", (chunk) => {

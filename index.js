@@ -497,19 +497,25 @@ function parseOrnamentInfo(buf, offset) {
   return { type, id, next: pos };
 }
 
-// Helper: parse PartOrnament|WeaponSkin wrapper: field 1 (0x0a) contains OrnamentInfo
+// Helper: parse PartOrnament|WeaponSkin wrapper.
+//   field 1 (0x0a) = OrnamentInfo { type, id }  (part ornament, or the weapon SUIT)
+//   field 3 (0x1a) = weapon ornament / charm string (WO-*, only present on the
+//                    WeaponSkin wrapper — EPBItemType::WeaponOrnament)
 function parseOrnamentWrapper(buf, offset) {
-  let result = null, pos = offset;
+  let result = null, charm = null, pos = offset;
   while (pos < buf.length) {
     let { value: t, next: np } = readVarint(buf, pos); pos = np;
     if ((t & 0x7) !== 2) break;
     let { value: inner, next: nq } = readLengthDelimited(buf, pos); pos = nq;
-    if ((t >>> 3) === 1) {
+    const fn = t >>> 3;
+    if (fn === 1) {
       let parsed = parseOrnamentInfo(inner, 0);
       result = { type: parsed.type, id: parsed.id };
+    } else if (fn === 3) {
+      charm = inner.toString('utf8');
     }
   }
-  return { ornament: result, next: pos };
+  return { ornament: result, charm, next: pos };
 }
 
 function decodeWeaponArchive(buf) {
@@ -517,6 +523,7 @@ function decodeWeaponArchive(buf) {
   let weaponId = null;
   const parts = [];
   let weaponOrnament = null;
+  let weaponCharm = null;
 
   while (i < buf.length) {
     let { value: tag, next } = readVarint(buf, i);
@@ -550,11 +557,12 @@ function decodeWeaponArchive(buf) {
       if (slotId != null && partId != null)
         parts.push({ slot: slotId, partId, ornament: partOrnament });
     } else if (fieldNumber === 3) {
-      let { ornament } = parseOrnamentWrapper(value, 0);
+      let { ornament, charm } = parseOrnamentWrapper(value, 0);
       weaponOrnament = ornament;
+      weaponCharm = charm;
     }
   }
-  return { weaponId, parts, ornament: weaponOrnament };
+  return { weaponId, parts, ornament: weaponOrnament, charm: weaponCharm };
 }
 
 

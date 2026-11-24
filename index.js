@@ -227,15 +227,47 @@ const LOG_LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
 const LOG_LEVEL_VALUE = LOG_LEVELS[LOG_LEVEL] !== undefined ? LOG_LEVELS[LOG_LEVEL] : LOG_LEVELS.info;
 
+const util = require("util");
+
+// Short clock time. The full ISO string was on every line purely for ordering,
+// which the clock already gives; the date is logged once at startup instead.
 function logTimestamp() {
-  return new Date().toISOString();
+  const d = new Date();
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+// One line per record: Node's default multi-line inspection is what turned
+// `Connection Request: {…}` into five-line blocks.
+function formatArgs(args) {
+  return args
+    .map((a) =>
+      typeof a === "string"
+        ? a
+        : util.inspect(a, { breakLength: Infinity, depth: 3, compact: true, colors: false })
+    )
+    .join(" ");
+}
+
+// Leading [TAG] is pulled out and padded, so tags form a column instead of
+// jittering between `[MM]` and `[PERSIST]`.
+const TAG_COLUMN = 9;
+function formatLine(args) {
+  const line = formatArgs(args);
+  const m = /^\[([A-Za-z][A-Za-z0-9 _-]*)\]/.exec(line);
+  if (!m) return line;
+  return m[0].padEnd(TAG_COLUMN) + " " + line.slice(m[0].length).trimStart();
+}
+
+function emit(stream, level, args) {
+  stream(`${logTimestamp()}  ${level.padEnd(5)} ${formatLine(args)}`);
 }
 
 const logger = {
-  debug: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.debug) console.log(`[${logTimestamp()}] [DEBUG]`, ...args); },
-  info:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.info)  console.log(`[${logTimestamp()}] [INFO]`, ...args); },
-  warn:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.warn)  console.warn(`[${logTimestamp()}] [WARN]`, ...args); },
-  error: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.error) console.error(`[${logTimestamp()}] [ERROR]`, ...args); },
+  debug: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.debug) emit(console.log, "DEBUG", args); },
+  info:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.info)  emit(console.log, "INFO", args); },
+  warn:  (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.warn)  emit(console.warn, "WARN", args); },
+  error: (...args) => { if (LOG_LEVEL_VALUE <= LOG_LEVELS.error) emit(console.error, "ERROR", args); },
 };
 
 // -----------------------------------------------------------------------------
@@ -705,21 +737,21 @@ function handleUpdateRoleArchive(ctx) {
   if (!req.roleId) return;
 
   const archive = ctx.socket._roleArchive;
-  if (!archive) { logger.warn(`${ctx.tag} [PERSIST] No archive on socket — gateToken not resolved`); return; }
+  if (!archive) { logger.warn(`[PERSIST] ${ctx.tag} No archive on socket — gateToken not resolved`); return; }
 
   const entry = ensureRoleEntry(archive, req.roleId);
   const field = SLOT_TO_FIELD[req.slot];
 
   if (field && req.itemId) {
     entry[field] = req.itemId;
-    logger.info(`${ctx.tag} [PERSIST] ${req.roleId}.${field} = ${req.itemId}`);
+    logger.info(`[PERSIST] ${ctx.tag} ${req.roleId}.${field} = ${req.itemId}`);
   } else if (req.slot === 7) {
     if (req.skinBase) entry[SKIN_BASE_KEY] = req.skinBase;
     if (req.skinOrnament) entry[SKIN_PAINT_KEY] = req.skinOrnament;
-    logger.info(`${ctx.tag} [PERSIST] ${req.roleId} skin = ${req.skinBase} / ${req.skinOrnament}`);
+    logger.info(`[PERSIST] ${ctx.tag} ${req.roleId} skin = ${req.skinBase} / ${req.skinOrnament}`);
   } else if ((req.slot === 9 || req.slot === 10) && req.itemId) {
     entry[`${COSMETIC_KEY_PREFIX}${req.slot}`] = req.itemId;
-    logger.info(`${ctx.tag} [PERSIST] ${req.roleId} cosmetic #${req.slot} = ${req.itemId}`);
+    logger.info(`[PERSIST] ${ctx.tag} ${req.roleId} cosmetic #${req.slot} = ${req.itemId}`);
   }
 
   saveArchiveFor(ctx.socket._playerId, archive);
@@ -740,7 +772,7 @@ function handleUpdateWeaponArchive(ctx) {
   entry[WEAPON_CONFIG_KEY][weaponId] = req.weaponArchiveBlob.toString("base64");
 
   logger.info(
-    `${ctx.tag} [PERSIST] ${req.roleId}.${weaponId} weapon archive (${req.weaponArchiveBlob.length}B)`
+    `[PERSIST] ${ctx.tag} ${req.roleId}.${weaponId} weapon archive (${req.weaponArchiveBlob.length}B)`
   );
   saveArchiveFor(ctx.socket._playerId, archive);
 }
@@ -785,11 +817,11 @@ app.use((req, res, next) => {
   if (req.path === "/favicon.ico" || req.path === "/api/health") return next();
 
   res.on("finish", () => {
-    const body =
-      req.body && typeof req.body === "object" && Object.keys(req.body).length
-        ? " " + JSON.stringify(req.body)
-        : "";
-    logger.info(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode}${body}`);
+    // Size, not the body: a loadout response is several KB of JSON per call and
+    // the payload is logged in full by the endpoints that actually change data.
+    const len = res.get("Content-Length");
+    const size = len ? ` (${len}B)` : "";
+    logger.info(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode}${size}`);
   });
 
   logger.debug(
@@ -817,11 +849,9 @@ app.post("/connectServer", (req, res) => {
   const playerId = req.body.playerId;
   const version = req.body.version;
 
-  logger.info("Connection Request:", {
-    platform,
-    playerId,
-    version,
-  });
+  // Per-login detail: one line, and debug — `[AUTH] Socket bound` below already
+  // reports the outcome at info.
+  logger.debug(`[CONNECT] ${playerId} platform=${platform} version=${version}`);
 
   const gateToken = crypto.randomUUID().toString();
   gateTokenToPlayerId.set(gateToken, playerId);
@@ -975,7 +1005,7 @@ function handleUpdateWeaponArchiveV2(ctx) {
 }
 
 function handleGetPlayerArchiveV2(ctx) {
-  logger.info(`${ctx.tag} [RECV] GetPlayerArchiveV2`);
+  logger.info(`[RECV] ${ctx.tag} GetPlayerArchiveV2`);
 
   const reqObj = decodeRequestMessage(
     "./game/proto/Request/GetPlayerArchiveV2Request.proto",
@@ -1043,7 +1073,7 @@ function handleQueryAssets(ctx) {
       itemCount: itemDatas.length,
     };
   }
-  logger.info(`${ctx.tag} [RECV] Query Assets (${cachedQueryAssets.itemCount} items)`);
+  logger.info(`[RECV] ${ctx.tag} Query Assets (${cachedQueryAssets.itemCount} items)`);
   sendEncodedProtoResponse(ctx.socket, ctx.messageId, ctx.rpcPath, cachedQueryAssets.responseBytes);
 }
 
@@ -1138,7 +1168,7 @@ function handleSetPresence(ctx) {
     ctx.messageBytes
   );
   partyPresence = reqObj.Presence;
-  logger.info(`${ctx.tag} [PARTY] Presence => ${partyPresence}`);
+  logger.info(`[PARTY] ${ctx.tag} Presence => ${partyPresence}`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1164,7 +1194,7 @@ function handleQueryPresence(ctx) {
 }
 
 function handleQueryUnityMatchmakingRegion(ctx) {
-  logger.info(`${ctx.tag} [RECV] Query Matchmaking Region`);
+  logger.info(`[RECV] ${ctx.tag} Query Matchmaking Region`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1176,7 +1206,7 @@ function handleQueryUnityMatchmakingRegion(ctx) {
 }
 
 function handleStartUnityMatchmaking(ctx) {
-  logger.info(`${ctx.tag} [RECV] Start Matchmaking`);
+  logger.info(`[RECV] ${ctx.tag} Start Matchmaking`);
   const reqObj = decodeRequestMessage(
     "./game/proto/Request/StartMatchmakingRequest.proto",
     "ProjectBoundary.StartMatchmakingRequest",
@@ -1206,7 +1236,7 @@ function handleGetDataStatisticsInfo(ctx) {
 }
 
 function handleQueryPlayList(ctx) {
-  logger.info(`${ctx.tag} [RECV] Query Playlists`);
+  logger.info(`[RECV] ${ctx.tag} Query Playlists`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1257,9 +1287,13 @@ const IGNORED_RPC_PATHS = [
 const ignoredRpcNoticed = new Set();
 
 function dispatchRpc(ctx) {
+  // Bare identifier (no brackets) so every message can read `[TAG] <who> …`
+  // and the tag column stays aligned by the logger.
   ctx.tag = ctx.socket._playerId
-    ? `[player ${ctx.socket._playerId}]`
-    : `[${ctx.socket.remoteAddress}:${ctx.socket.remotePort}]`;
+    ? String(ctx.socket._playerId)
+    : `${ctx.socket.remoteAddress}:${ctx.socket.remotePort}`;
+
+  const t0 = process.hrtime.bigint();
 
   // GateToken echo: dynamic UUID tokens resolve the socket's player identity
   if (gateTokenToPlayerId.has(ctx.rpcPath)) {
@@ -1273,11 +1307,11 @@ function dispatchRpc(ctx) {
     if (ignored) {
       if (!ignoredRpcNoticed.has(ctx.rpcPath)) {
         ignoredRpcNoticed.add(ctx.rpcPath);
-        logger.debug(`${ctx.tag} [RPC] ignoring known no-op ${ctx.rpcPath} (suppressed at info)`);
+        logger.debug(`[RPC] ${ctx.tag} ignoring known no-op ${ctx.rpcPath} (suppressed at info)`);
       }
       return;
     }
-    logger.warn(`${ctx.tag} [RPC] Unhandled message ${ctx.rpcPath} (MessageId ${ctx.messageId})`);
+    logger.warn(`[RPC] ${ctx.tag} Unhandled message ${ctx.rpcPath} (MessageId ${ctx.messageId})`);
     logLoadoutHex({
       rpcPath: ctx.rpcPath,
       messageId: ctx.messageId,
@@ -1292,9 +1326,21 @@ function dispatchRpc(ctx) {
     handler(ctx);
   } catch (err) {
     logger.error(
-      `${ctx.tag} [RPC] Handler failed path=${ctx.rpcPath} MessageId=${ctx.messageId}:`,
+      `[RPC] ${ctx.tag} Handler failed path=${ctx.rpcPath} MessageId=${ctx.messageId}:`,
       err && err.stack ? err.stack : err
     );
+  }
+
+  // Server-side handler timing: proves whether the ACK is stuck in the
+  // metaserver (should be well under 1ms now) or the delay is network/client.
+  const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
+  const isWrite =
+    ctx.rpcPath === "/assets.Assets/UpdateRoleArchiveV2" ||
+    ctx.rpcPath === "/assets.Assets/UpdateWeaponArchiveV2";
+  if (isWrite) {
+    logger.info(`[TIMING] ${ctx.tag} ${ctx.rpcPath} server-handled in ${elapsedMs.toFixed(3)}ms`);
+  } else {
+    logger.debug(`[TIMING] ${ctx.tag} ${ctx.rpcPath} in ${elapsedMs.toFixed(3)}ms`);
   }
 }
 
@@ -1385,7 +1431,8 @@ function onTcpData(socket, chunk) {
 }
 
 const server = net.createServer((socket) => {
-  logger.info(`[RPC] client connected from ${socket.remoteAddress}:${socket.remotePort}`);
+  // Connect/disconnect is debug: one line per socket at info drowned the RPCs.
+  logger.debug(`[RPC] ${socket.remoteAddress}:${socket.remotePort} connected`);
 
   socket.setNoDelay(true); // disable Nagle's algorithm for snappier ACK latency
   socket._recvBuffer = Buffer.alloc(0);
@@ -1449,7 +1496,7 @@ matchmakingUDPServer.on("listening", () => {
 });
 
 const matchmakingTCPServer = net.createServer((socket) => {
-  logger.info(`[MM] TCP client connected from ${socket.remoteAddress}:${socket.remotePort}`);
+  logger.debug(`[MM] TCP ${socket.remoteAddress}:${socket.remotePort} connected`);
   socket.on("data", (rawdata) => {
     logger.debug(`[MM] TCP data (${rawdata.length}B): ${rawdata.toString("hex").slice(0, 128)}`);
   });
@@ -1481,9 +1528,13 @@ process.on("unhandledRejection", (reason) => {
 });
 
 app.listen(HTTP_PORT, () => {
+  // Timestamps are clock-only, so the date and level are stated once here.
+  logger.info(
+    `[BOOT] Boundary MetaServer started ${new Date().toISOString()} (log level: ${LOG_LEVEL})`
+  );
   logger.info(`[HTTP] listening on :${HTTP_PORT}`);
   server.listen(RPC_PORT, () => {
-    logger.info(`[RPC]  listening on :${RPC_PORT}`);
+    logger.info(`[RPC] listening on :${RPC_PORT}`);
     matchmakingUDPServer.bind(MATCHMAKING_PORT);
     matchmakingTCPServer.listen(MATCHMAKING_PORT);
   });

@@ -1168,7 +1168,8 @@ function handleSetPresence(ctx) {
     ctx.messageBytes
   );
   partyPresence = reqObj.Presence;
-  logger.info(`[PARTY] ${ctx.tag} Presence => ${partyPresence}`);
+  // Screen transition, fires on every menu change and diagnoses nothing.
+  logger.debug(`[PARTY] ${ctx.tag} Presence => ${partyPresence}`);
   sendProtoResponse(
     ctx.socket,
     ctx.messageId,
@@ -1530,7 +1531,7 @@ process.on("unhandledRejection", (reason) => {
 app.listen(HTTP_PORT, () => {
   // Timestamps are clock-only, so the date and level are stated once here.
   logger.info(
-    `[BOOT] Boundary MetaServer started ${new Date().toISOString()} (log level: ${LOG_LEVEL})`
+    `[BOOT] Boundary MetaServer started ${new Date().toISOString().slice(0, 10)} (log level: ${LOG_LEVEL})`
   );
   logger.info(`[HTTP] listening on :${HTTP_PORT}`);
   server.listen(RPC_PORT, () => {

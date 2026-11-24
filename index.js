@@ -1441,9 +1441,19 @@ function onTcpData(socket, chunk) {
   }
 }
 
+// Who a socket line is about: the bound player once the gateToken handshake has
+// resolved one, the peer address before that. IPv4-mapped addresses
+// (`::ffff:1.2.3.4`) are what Node reports on dual-stack sockets and the prefix
+// is pure noise in a log line.
+function peerOf(socket) {
+  if (socket._playerId) return String(socket._playerId);
+  const addr = (socket.remoteAddress || "unknown").replace(/^::ffff:/, "");
+  return `${addr}:${socket.remotePort}`;
+}
+
 const server = net.createServer((socket) => {
   // Connect/disconnect is debug: one line per socket at info drowned the RPCs.
-  logger.debug(`[RPC] ${socket.remoteAddress}:${socket.remotePort} connected`);
+  logger.debug(`[RPC] ${peerOf(socket)} connected`);
 
   socket.setNoDelay(true); // disable Nagle's algorithm for snappier ACK latency
   socket._recvBuffer = Buffer.alloc(0);
@@ -1459,15 +1469,17 @@ const server = net.createServer((socket) => {
     }
   });
 
-  socket.on("end", () =>
-    logger.info(
-      `[RPC] client disconnected ${socket.remoteAddress}:${socket.remotePort}` +
-        (socket._playerId ? ` (player ${socket._playerId})` : "")
-    )
-  );
-  socket.on("error", (err) =>
-    logger.error(`[RPC] socket error ${socket.remoteAddress}:${socket.remotePort}:`, err.message)
-  );
+  // Connection lifecycle is debug, paired with the connect line above: INFO
+  // should describe work, not sockets coming and going.
+  socket.on("end", () => logger.debug(`[RPC] ${peerOf(socket)} disconnected`));
+  socket.on("error", (err) => {
+    // A client dropping mid-read is routine — the game does it on every menu
+    // change and on shutdown — so only unexpected codes deserve ERROR.
+    const routine = ["ECONNRESET", "EPIPE", "ECONNABORTED"].includes(err.code);
+    (routine ? logger.debug : logger.error)(
+      `[RPC] ${peerOf(socket)} ${err.code || "error"}: ${err.message}`
+    );
+  });
 });
 
 server.on("error", (err) => {

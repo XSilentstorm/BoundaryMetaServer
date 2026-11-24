@@ -816,12 +816,23 @@ app.use((req, res, next) => {
   // Skip favicon + health probes (polled constantly by the game/DLL and uptime checks).
   if (req.path === "/favicon.ico" || req.path === "/api/health") return next();
 
+  // Keep the payload of failing responses: a 4xx/5xx body is a few dozen bytes
+  // and is the only explanation of *why* the call failed. Successful bodies are
+  // dropped — a loadout response is several KB per call.
+  const sendJson = res.json.bind(res);
+  res.json = (payload) => {
+    if (res.statusCode >= 400) res._logBody = payload;
+    return sendJson(payload);
+  };
+
   res.on("finish", () => {
-    // Size, not the body: a loadout response is several KB of JSON per call and
-    // the payload is logged in full by the endpoints that actually change data.
+    const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
     const len = res.get("Content-Length");
     const size = len ? ` (${len}B)` : "";
-    logger.info(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode}${size}`);
+    const body = res._logBody
+      ? ` ${util.inspect(res._logBody, { breakLength: Infinity, depth: 2, compact: true, colors: false })}`
+      : "";
+    logger[level](`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode}${size}${body}`);
   });
 
   logger.debug(
@@ -953,6 +964,18 @@ app.put("/api/loadout/:playerId", (req, res) => {
   }
 });
 
+// Last middleware: anything thrown or forwarded out of a route lands here.
+// Without it express answers with its default HTML 500 and writes nothing to
+// the log, so a failing endpoint would be invisible on the server side.
+app.use((err, req, res, next) => {
+  logger.error(
+    `[HTTP] ${req.method} ${req.originalUrl} threw:`,
+    err && err.stack ? err.stack : err
+  );
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
+});
+
 // =============================================================================
 //  RPC Handlers
 // =============================================================================
@@ -1073,7 +1096,7 @@ function handleQueryAssets(ctx) {
       itemCount: itemDatas.length,
     };
   }
-  logger.info(`[RECV] ${ctx.tag} Query Assets (${cachedQueryAssets.itemCount} items)`);
+  logger.debug(`[RECV] ${ctx.tag} Query Assets (${cachedQueryAssets.itemCount} items)`);
   sendEncodedProtoResponse(ctx.socket, ctx.messageId, ctx.rpcPath, cachedQueryAssets.responseBytes);
 }
 
@@ -1294,8 +1317,6 @@ function dispatchRpc(ctx) {
     ? String(ctx.socket._playerId)
     : `${ctx.socket.remoteAddress}:${ctx.socket.remotePort}`;
 
-  const t0 = process.hrtime.bigint();
-
   // GateToken echo: dynamic UUID tokens resolve the socket's player identity
   if (gateTokenToPlayerId.has(ctx.rpcPath)) {
     handleGateTokenEcho(ctx);
@@ -1332,17 +1353,6 @@ function dispatchRpc(ctx) {
     );
   }
 
-  // Server-side handler timing: proves whether the ACK is stuck in the
-  // metaserver (should be well under 1ms now) or the delay is network/client.
-  const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
-  const isWrite =
-    ctx.rpcPath === "/assets.Assets/UpdateRoleArchiveV2" ||
-    ctx.rpcPath === "/assets.Assets/UpdateWeaponArchiveV2";
-  if (isWrite) {
-    logger.info(`[TIMING] ${ctx.tag} ${ctx.rpcPath} server-handled in ${elapsedMs.toFixed(3)}ms`);
-  } else {
-    logger.debug(`[TIMING] ${ctx.tag} ${ctx.rpcPath} in ${elapsedMs.toFixed(3)}ms`);
-  }
 }
 
 // =============================================================================
@@ -1527,6 +1537,15 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason) => {
   logger.error("[FATAL] unhandledRejection:", reason);
 });
+
+// Without a handler a pm2 restart just stops the log mid-line; this marks the
+// boundary so a gap in the log can be told apart from a crash.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    logger.info(`[SHUTDOWN] ${sig} received — stopping`);
+    process.exit(0);
+  });
+}
 
 app.listen(HTTP_PORT, () => {
   // Timestamps are clock-only, so the date and level are stated once here.

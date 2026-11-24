@@ -1313,9 +1313,17 @@ const ignoredRpcNoticed = new Set();
 function dispatchRpc(ctx) {
   // Bare identifier (no brackets) so every message can read `[TAG] <who> …`
   // and the tag column stays aligned by the logger.
-  ctx.tag = ctx.socket._playerId
-    ? String(ctx.socket._playerId)
-    : `${ctx.socket.remoteAddress}:${ctx.socket.remotePort}`;
+  ctx.tag = peerOf(ctx.socket);
+
+  // Cadence of the client's own messages: how long it waited before sending
+  // this one. The armory delay question is whether the gap is before the
+  // request reaches us (client/network) or after we answer.
+  {
+    const now = Date.now();
+    const prev = ctx.socket._lastRpcAt;
+    ctx.socket._lastRpcAt = now;
+    if (prev) logger.debug(`[RPC] ${ctx.tag} ${ctx.rpcPath} (+${now - prev}ms)`);
+  }
 
   // GateToken echo: dynamic UUID tokens resolve the socket's player identity
   if (gateTokenToPlayerId.has(ctx.rpcPath)) {
@@ -1400,10 +1408,27 @@ function processTcpFrame(socket, frameBytes) {
  * Handles fragmentation, coalescing, empty payloads, and bad length headers.
  */
 function onTcpData(socket, chunk) {
+  const now = Date.now();
+
+  // A frame left half-received means the previous chunk did not finish it. If
+  // the next chunk only lands hundreds of ms later, the client's write was
+  // split by a TCP retransmit (or it paused mid-write) — which is what a
+  // multi-second armory stall looks like from this side of the wire. Logged at
+  // warn so it shows up without turning on debug.
+  if (socket._recvBuffer.length > 0 && socket._partialSince) {
+    const gap = now - socket._partialSince;
+    if (gap >= 250) {
+      logger.warn(
+        `[RPC] ${peerOf(socket)} frame stalled ${gap}ms mid-message (${socket._recvBuffer.length}B buffered)`
+      );
+    }
+  }
+
   socket._recvBuffer = Buffer.concat([socket._recvBuffer, chunk]);
 
   while (true) {
     if (socket._recvBuffer.length < TCP_LENGTH_HEADER_SIZE) {
+      socket._partialSince = now;
       return;
     }
 
@@ -1424,6 +1449,7 @@ function onTcpData(socket, chunk) {
 
     const frameLength = TCP_LENGTH_HEADER_SIZE + payloadLength;
     if (socket._recvBuffer.length < frameLength) {
+      socket._partialSince = now;
       return; // wait for rest of frame
     }
 

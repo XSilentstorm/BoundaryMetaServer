@@ -1176,12 +1176,19 @@ function handlePartyReady(ctx) {
   );
 }
 
-function handlePartyGet(_ctx) {
-  // no-op
+function handlePartyGet(ctx) {
+  // Same rule as handleTextFilter: an unanswered request stays pending on the
+  // client and is retried on the 5s cycle, dragging other queued traffic with it.
+  sendEncodedProtoResponse(ctx.socket, ctx.messageId, ctx.rpcPath, Buffer.alloc(0));
 }
 
-function handleTextFilter(_ctx) {
-  // no-op
+function handleTextFilter(ctx) {
+  // Must reply, even with nothing to say. Left as a no-op, the client kept the
+  // call pending, retried it on a ~5s cycle, and those retries accumulated into
+  // the outbound batch that every other queued request rides in — which is what
+  // made a loadout change in the armory take up to 5s to leave the client.
+  // An empty TextFilterResponse parses to all-defaults, which is a valid answer.
+  sendEncodedProtoResponse(ctx.socket, ctx.messageId, ctx.rpcPath, Buffer.alloc(0));
 }
 
 function handleSetPresence(ctx) {

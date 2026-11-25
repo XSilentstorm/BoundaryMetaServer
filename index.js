@@ -13,6 +13,7 @@ const protobuf = require("protobufjs");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 const udp = require("dgram");
 const { serialize } = require("v8"); // retained (present in original)
 
@@ -920,9 +921,26 @@ function buildLoadoutResponse(archive, playerId) {
   return { playerId, roles };
 }
 
+// A loadout document is ~29 KB of repetitive JSON, which compresses to ~4 KB.
+// That matters beyond bandwidth: one player's link caps a single TCP connection
+// at ~12.5 KB and then stalls, so the uncompressed archive never arrives while
+// the compressed one fits comfortably. X-Uncompressed-Length lets the client
+// verify the transfer even though Content-Length now describes the gzip body.
+function sendLoadoutJson(req, res, payload) {
+  const json = Buffer.from(JSON.stringify(payload), "utf8");
+  res.set("X-Uncompressed-Length", String(json.length));
+  res.type("application/json");
+  if (/\bgzip\b/i.test(String(req.headers["accept-encoding"] || ""))) {
+    const gz = zlib.gzipSync(json);
+    res.set("Content-Encoding", "gzip");
+    return res.status(200).send(gz);
+  }
+  return res.status(200).send(json);
+}
+
 app.get("/api/loadout/:playerId", (req, res) => {
   const archive = loadArchiveFor(req.params.playerId);
-  res.status(200).json(buildLoadoutResponse(archive, req.params.playerId));
+  sendLoadoutJson(req, res, buildLoadoutResponse(archive, req.params.playerId));
 });
 
 app.get("/api/loadout/:playerId/:roleId", (req, res) => {
@@ -932,7 +950,7 @@ app.get("/api/loadout/:playerId/:roleId", (req, res) => {
     : Object.keys(archive).find((k) => k.toLowerCase() === roleId.toLowerCase());
   if (!lookupId) return res.status(404).json({ error: "Role not found" });
   const single = { [lookupId]: archive[lookupId] };
-  res.status(200).json(buildLoadoutResponse(single, req.params.playerId));
+  sendLoadoutJson(req, res, buildLoadoutResponse(single, req.params.playerId));
 });
 
 app.put("/api/loadout/:playerId", (req, res) => {
